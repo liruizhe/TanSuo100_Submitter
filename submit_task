@@ -1,0 +1,79 @@
+#!/bin/bash
+
+function usage
+{
+    echo "usage: submit_task [options] executable [args]"
+    echo "  -n, --nprocess=<n>             # Specify the number of processes(default: 1)"
+    echo "  -t, --nthread=<n>              # Specify the number of OpenMP threads per process(default: 1)"
+    echo "  -i, --input=<input filename>   # Specify the input file to stdin"
+}
+
+#Parse paramters
+TEMP=$(getopt -a -q -o n:t:i: --long nprocess:,nthread:,input: -- "$@")
+eval set -- "$TEMP"
+
+noparam=""
+while true; do
+    case "$1" in
+        -n|--nprocess)
+        process="$2"; shift 2;; 
+        -t|--nthread)
+        thread="$2"; shift 2;; 
+        -i|--input)
+        input="$2"; shift 2;; 
+        --) 
+        shift; break;;
+        *)  
+        echo "Internal error!"; exit 1;; 
+    esac 
+done
+
+if [ -z $process ]; then
+    process=1
+fi
+
+if [ -z $thread ]; then
+    thread=1
+fi
+
+if [ -z max_pass ]; then
+    max_pass=1
+fi
+
+execfile=$1
+shift 1
+
+if [ -z $execfile ]; then
+    usage
+    exit 1
+fi
+
+let core=process*thread
+echo "$process * $thread Total ($process processes, $core cores)"
+ptile=12
+align=(1 1 2 3 4 6 6 12 12 12 12 12 12)
+let core=process*align[thread]
+
+if [ $(($core % 12)) -ne 0 ]; then
+    let core=(core/12+1)*12
+fi
+
+echo "  Request $core cores"
+cat job.template|sed "s/@CORE@/$core/g;s/@PTILE@/$ptile/g;s/@OMP@/$thread/g;s/@MPI@/$process/g;s/@OMP_ALIGN@/${align[$thread]}/g;s#@EXECFILE@#$execfile#g;" > job.1
+if [ ! -z $input ]; then
+    cat job.1|sed "s#@BSUB_INPUT@#\#BSUB -i $input#g" > job.2
+    mv job.2 job.1
+fi
+
+args=""
+while (( $# > 0 ))
+do
+    args="$args \"$1\""
+    shift
+done
+cat job.1|sed "s#@ARGS@#$args#g" > job
+rm job.1
+
+bsub < job > tmp.out
+jobid=$(cat tmp.out|grep "Job <"|sed "s#Job <\([0-9]\{1,\}\)>.*#\1#g")
+echo "Task submited, Job ID=$jobid"

@@ -1,0 +1,33 @@
+#!/bin/bash
+#BSUB -q hpc_linux
+#BSUB -a openmp
+#BSUB -n @CORE@
+#BSUB -R "span[ptile=@PTILE@]"
+@BSUB_INPUT@
+#BSUB -o output.%J
+#BSUB -e error.%J
+
+export OMP_NUM_THREADS=@OMP@
+
+rm -rf ./hosts
+touch ./hosts
+
+let proc_per_node=@PTILE@/@OMP@
+k=0
+count=0
+for i in `echo $LSB_MCPU_HOSTS`
+do
+    let k=k+1
+    if [ $((k % 2)) -eq 1 ] 
+    then
+        for (( j = 0; j < $proc_per_node; j++ )); do
+            if [ $count -eq @MPI@ ]; then
+                break
+            fi
+            let count=count+1
+            echo $i>>./hosts
+        done
+    fi
+done
+
+/apps/mpi/mvapich-2.1.7a-intel11.1/bin/mpirun -machinefile ./hosts -np @MPI@ @EXECFILE@ @ARGS@
