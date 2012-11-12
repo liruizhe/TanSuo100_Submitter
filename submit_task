@@ -63,6 +63,9 @@ cat job.template|sed "s/@CORE@/$core/g;s/@PTILE@/$ptile/g;s/@OMP@/$thread/g;s/@M
 if [ ! -z $input ]; then
     cat job.1|sed "s#@BSUB_INPUT@#\#BSUB -i $input#g" > job.2
     mv job.2 job.1
+else
+    cat job.1|sed "s#@BSUB_INPUT@##g" > job.2
+    mv job.2 job.1
 fi
 
 args=""
